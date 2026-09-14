@@ -1,0 +1,24 @@
+{
+  "fonts": [
+    {
+      "id": "kanit",
+      "name": "Kanit",
+      "family": "Kanit",
+      "cssStack": "'Kanit', sans-serif",
+      "googleFont": "Kanit:wght@300;400;500;600;700",
+      "category": "display-sans",
+      "description": "โมเดิร์น ไร้หัว ทันสมัย เหมาะสำหรับหัวข้อและงานพรีเซนเทชัน",
+      "sampleText": "รายงานสรุปประจำไตรมาส DocBuilder 2026"
+    },
+    {
+      "id": "chonburi",
+      "name": "Chonburi",
+      "family": "Chonburi",
+      "cssStack": "'Chonburi', cursive",
+      "googleFont": "Chonburi:wght@400",
+      "category": "display-serif",
+      "description": "คอนทราสต์เส้นหนา-บางสูง โดดเด่นเป็นเอกลักษณ์ เหมาะกับพาดหัวหลัก",
+      "sampleText": "หนังสือรับรองผลงานอันทรงเกียรติ"
+    }
+  ]
+}

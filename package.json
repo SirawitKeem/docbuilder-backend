@@ -1,0 +1,12 @@
+{
+  "name": "docbuilder-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DocBuilder Go Backend Server",
+  "scripts": {
+    "dev": "go run cmd/api/main.go",
+    "build": "go build -o bin/server.exe cmd/api/main.go",
+    "start": "bin/server.exe",
+    "test": "go test ./..."
+  }
+}
