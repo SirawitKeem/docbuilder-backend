@@ -15,7 +15,7 @@ func main() {
 	}
 	defer db.Close()
 
-	tables := []string{"field_profiles", "field_profile_templates", "field_profile_values", "settings", "sent_history", "documents", "document_tables", "document_table_rows"}
+	tables := []string{"templates", "template_versions", "documents"}
 	for _, t := range tables {
 		rows, err := db.Query("SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name=$1 ORDER BY ordinal_position", t)
 		if err != nil {

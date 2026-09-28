@@ -13,15 +13,29 @@ type TemplateCategory struct {
 }
 
 type CustomTemplate struct {
-	ID          string                 `json:"id"`
-	Name        string                 `json:"name"`
-	CategoryID  string                 `json:"categoryId"`
-	Description string                 `json:"description"`
-	Format      string                 `json:"format"` // docs (A4), slides (16:9), sheets
-	Blocks      []TemplateBlock        `json:"blocks,omitempty"`
-	Config      map[string]interface{} `json:"config,omitempty"`
-	CreatedAt   time.Time              `json:"createdAt"`
-	UpdatedAt   time.Time              `json:"updatedAt"`
+	ID               string                 `json:"id"`
+	Name             string                 `json:"name"`
+	CategoryID       string                 `json:"categoryId"`
+	Description      string                 `json:"description,omitempty"`
+	EditorType       string                 `json:"editorType,omitempty"`       // document, slide, sheet
+	Format           string                 `json:"format,omitempty"`           // legacy alias
+	CanvasPreset     string                 `json:"canvasPreset,omitempty"`     // a4-portrait, slide-16-9, etc.
+	Orientation      string                 `json:"orientation,omitempty"`      // portrait, landscape
+	Theme            string                 `json:"theme,omitempty"`
+	Status           string                 `json:"status,omitempty"`
+	Icon             string                 `json:"icon,omitempty"`
+	Badge            string                 `json:"badge,omitempty"`
+	Version          int                    `json:"version,omitempty"`
+	CurrentVersionID string                 `json:"currentVersionId,omitempty"`
+	Margin           interface{}            `json:"margin,omitempty"`
+	PageCount        int                    `json:"pageCount,omitempty"`
+	Pages            interface{}            `json:"pages,omitempty"`          // Canvas Fabric.js pages JSON
+	SheetData        interface{}            `json:"sheetData,omitempty"`        // Spreadsheet JSON
+	Blocks           []TemplateBlock        `json:"blocks,omitempty"`
+	Config           map[string]interface{} `json:"config,omitempty"`
+	CreatedByUserID  string                 `json:"createdByUserId,omitempty"`
+	CreatedAt        time.Time              `json:"createdAt"`
+	UpdatedAt        time.Time              `json:"updatedAt"`
 }
 
 type TemplateBlock struct {

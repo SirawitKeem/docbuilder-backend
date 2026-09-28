@@ -3,21 +3,23 @@ package model
 import "time"
 
 type Document struct {
-	ID                string                 `json:"id"`
-	VerificationToken string                 `json:"verificationToken"`
-	ProfileID         *string                `json:"profileId,omitempty"`
-	Name              string                 `json:"name"`
-	TemplateID        string                 `json:"templateId"`
-	TemplateName      string                 `json:"templateName"`
-	CreatedBy         string                 `json:"createdBy"`
-	CreatedAt         time.Time              `json:"createdAt"`
-	UpdatedAt         time.Time              `json:"updatedAt"`
-	Status            string                 `json:"status"` // draft, sent, exported, pending_approval
-	SentTo            *string                `json:"sentTo,omitempty"`
-	LastSentAt        *time.Time             `json:"lastSentAt,omitempty"`
-	Values            map[string]interface{} `json:"values"`
-	ActivityLogs      []ActivityLog          `json:"activityLogs,omitempty"`
-	ExportHistory     []ExportHistoryEntry   `json:"exportHistory,omitempty"`
+	ID                string                   `json:"id"`
+	VerificationToken string                   `json:"verificationToken"`
+	ProfileID         *string                  `json:"profileId,omitempty"`
+	Name              string                   `json:"name"`
+	TemplateID        string                   `json:"templateId"`
+	TemplateVersionID *string                  `json:"templateVersionId,omitempty"`
+	TemplateName      string                   `json:"templateName"`
+	CreatedBy         string                   `json:"createdBy"`
+	CreatedAt         time.Time                `json:"createdAt"`
+	UpdatedAt         time.Time                `json:"updatedAt"`
+	Status            string                   `json:"status"` // draft, sent, exported, pending_approval
+	SentTo            *string                  `json:"sentTo,omitempty"`
+	LastSentAt        *time.Time               `json:"lastSentAt,omitempty"`
+	Values            map[string]interface{}   `json:"values"`
+	ActivityLogs      []ActivityLog            `json:"activityLogs,omitempty"`
+	ApprovalChain     []map[string]interface{} `json:"approvalChain,omitempty"`
+	ExportHistory     []ExportHistoryEntry     `json:"exportHistory,omitempty"`
 }
 
 type ActivityLog struct {

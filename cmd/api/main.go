@@ -75,6 +75,15 @@ func main() {
 		mux.HandleFunc("GET /api/v1/templates/{id}", tmplHandler.GetTemplateByID)
 		mux.HandleFunc("GET /api/templates/{id}", tmplHandler.GetTemplateByID)
 
+		mux.HandleFunc("POST /api/v1/templates", tmplHandler.CreateTemplate)
+		mux.HandleFunc("POST /api/templates", tmplHandler.CreateTemplate)
+
+		mux.HandleFunc("PUT /api/v1/templates/{id}", tmplHandler.UpdateTemplate)
+		mux.HandleFunc("PUT /api/templates/{id}", tmplHandler.UpdateTemplate)
+
+		mux.HandleFunc("DELETE /api/v1/templates/{id}", tmplHandler.DeleteTemplate)
+		mux.HandleFunc("DELETE /api/templates/{id}", tmplHandler.DeleteTemplate)
+
 		// Field Profile (Data Presets) Routes
 		mux.HandleFunc("GET /api/v1/field-profiles", profileHandler.ListProfiles)
 		mux.HandleFunc("GET /api/field-profiles", profileHandler.ListProfiles)

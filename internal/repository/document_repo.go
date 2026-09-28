@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"time"
@@ -21,8 +22,12 @@ func NewDocumentRepository(db *sql.DB) *DocumentRepository {
 // GetAllDocuments retrieves all documents ordered by created_at DESC
 func (r *DocumentRepository) GetAllDocuments(ctx context.Context) ([]model.Document, error) {
 	query := `
-		SELECT d.id, d.verification_token, d.name, d.template_id, COALESCE(t.name, d.template_id),
-		       d.status, d.sent_to, d.last_sent_at, d.created_at, d.updated_at
+		SELECT d.id, d.verification_token, d.name, d.template_id,
+		       COALESCE(d.template_name, t.name, d.template_id),
+		       COALESCE(d.created_by, 'ผู้จัดทำเอกสาร'),
+		       d.status, d.sent_to, d.last_sent_at,
+		       d.values, d.activity_logs, d.approval_chain,
+		       d.created_at, d.updated_at
 		FROM documents d
 		LEFT JOIN templates t ON d.template_id = t.id
 		WHERE d.deleted_at IS NULL
@@ -37,27 +42,37 @@ func (r *DocumentRepository) GetAllDocuments(ctx context.Context) ([]model.Docum
 	var docs []model.Document
 	for rows.Next() {
 		var doc model.Document
-		var token, sentTo sql.NullString
+		var token, templateID, sentTo, createdBy, tmplName sql.NullString
 		var lastSentAt sql.NullTime
+		var valuesJSON, logsJSON, chainJSON []byte
 
 		if err := rows.Scan(
-			&doc.ID, &token, &doc.Name, &doc.TemplateID, &doc.TemplateName,
-			&doc.Status, &sentTo, &lastSentAt, &doc.CreatedAt, &doc.UpdatedAt,
+			&doc.ID, &token, &doc.Name, &templateID, &tmplName,
+			&createdBy, &doc.Status, &sentTo, &lastSentAt,
+			&valuesJSON, &logsJSON, &chainJSON,
+			&doc.CreatedAt, &doc.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan document failed: %w", err)
 		}
 
-		if token.Valid {
-			doc.VerificationToken = token.String
-		}
-		if sentTo.Valid {
-			doc.SentTo = &sentTo.String
-		}
-		if lastSentAt.Valid {
-			doc.LastSentAt = &lastSentAt.Time
-		}
+		if token.Valid { doc.VerificationToken = token.String }
+		if templateID.Valid { doc.TemplateID = templateID.String }
+		if sentTo.Valid { doc.SentTo = &sentTo.String }
+		if lastSentAt.Valid { doc.LastSentAt = &lastSentAt.Time }
+		if createdBy.Valid { doc.CreatedBy = createdBy.String }
+		if tmplName.Valid { doc.TemplateName = tmplName.String }
 
 		doc.Values = make(map[string]interface{})
+		if len(valuesJSON) > 0 {
+			_ = json.Unmarshal(valuesJSON, &doc.Values)
+		}
+		if len(logsJSON) > 0 {
+			_ = json.Unmarshal(logsJSON, &doc.ActivityLogs)
+		}
+		if len(chainJSON) > 0 {
+			_ = json.Unmarshal(chainJSON, &doc.ApprovalChain)
+		}
+
 		docs = append(docs, doc)
 	}
 
@@ -67,20 +82,27 @@ func (r *DocumentRepository) GetAllDocuments(ctx context.Context) ([]model.Docum
 // GetDocumentByID retrieves a single document with all its field values and logs
 func (r *DocumentRepository) GetDocumentByID(ctx context.Context, id string) (*model.Document, error) {
 	query := `
-		SELECT d.id, d.verification_token, d.name, d.template_id, COALESCE(t.name, d.template_id),
-		       d.status, d.sent_to, d.last_sent_at, d.created_at, d.updated_at
+		SELECT d.id, d.verification_token, d.name, d.template_id,
+		       COALESCE(d.template_name, t.name, d.template_id),
+		       COALESCE(d.created_by, 'ผู้จัดทำเอกสาร'),
+		       d.status, d.sent_to, d.last_sent_at,
+		       d.values, d.activity_logs, d.approval_chain,
+		       d.created_at, d.updated_at
 		FROM documents d
 		LEFT JOIN templates t ON d.template_id = t.id
-		WHERE d.id = $1 AND d.deleted_at IS NULL
+		WHERE (d.id = $1 OR d.verification_token = $1) AND d.deleted_at IS NULL
 		LIMIT 1
 	`
 	var doc model.Document
-	var token, sentTo sql.NullString
+	var token, templateID, sentTo, createdBy, tmplName sql.NullString
 	var lastSentAt sql.NullTime
+	var valuesJSON, logsJSON, chainJSON []byte
 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&doc.ID, &token, &doc.Name, &doc.TemplateID, &doc.TemplateName,
-		&doc.Status, &sentTo, &lastSentAt, &doc.CreatedAt, &doc.UpdatedAt,
+		&doc.ID, &token, &doc.Name, &templateID, &tmplName,
+		&createdBy, &doc.Status, &sentTo, &lastSentAt,
+		&valuesJSON, &logsJSON, &chainJSON,
+		&doc.CreatedAt, &doc.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -89,69 +111,28 @@ func (r *DocumentRepository) GetDocumentByID(ctx context.Context, id string) (*m
 		return nil, fmt.Errorf("get document by id failed: %w", err)
 	}
 
-	if token.Valid {
-		doc.VerificationToken = token.String
-	}
-	if sentTo.Valid {
-		doc.SentTo = &sentTo.String
-	}
-	if lastSentAt.Valid {
-		doc.LastSentAt = &lastSentAt.Time
-	}
+	if token.Valid { doc.VerificationToken = token.String }
+	if templateID.Valid { doc.TemplateID = templateID.String }
+	if sentTo.Valid { doc.SentTo = &sentTo.String }
+	if lastSentAt.Valid { doc.LastSentAt = &lastSentAt.Time }
+	if createdBy.Valid { doc.CreatedBy = createdBy.String }
+	if tmplName.Valid { doc.TemplateName = tmplName.String }
 
-	// Fetch document field values (EAV)
-	valuesQuery := `
-		SELECT field_key, text_value, number_value
-		FROM document_field_values
-		WHERE document_id = $1
-	`
 	doc.Values = make(map[string]interface{})
-	vRows, err := r.db.QueryContext(ctx, valuesQuery, id)
-	if err == nil {
-		defer vRows.Close()
-		for vRows.Next() {
-			var k string
-			var textVal sql.NullString
-			var numVal sql.NullFloat64
-			if err := vRows.Scan(&k, &textVal, &numVal); err == nil {
-				if textVal.Valid {
-					doc.Values[k] = textVal.String
-				} else if numVal.Valid {
-					doc.Values[k] = numVal.Float64
-				}
-			}
-		}
+	if len(valuesJSON) > 0 {
+		_ = json.Unmarshal(valuesJSON, &doc.Values)
 	}
-
-	// Fetch activity logs
-	logsQuery := `
-		SELECT id, action, performed_by, details, comment, created_at
-		FROM document_activity_logs
-		WHERE document_id = $1
-		ORDER BY created_at ASC
-	`
-	lRows, err := r.db.QueryContext(ctx, logsQuery, id)
-	if err == nil {
-		defer lRows.Close()
-		for lRows.Next() {
-			var l model.ActivityLog
-			var action, perf, det, comm sql.NullString
-			var createdAt time.Time
-			if err := lRows.Scan(&l.ID, &action, &perf, &det, &comm, &createdAt); err == nil {
-				l.Action = action.String
-				l.PerformedBy = perf.String
-				l.Details = det.String
-				l.Comment = comm.String
-				l.Timestamp = createdAt
-				doc.ActivityLogs = append(doc.ActivityLogs, l)
-			}
-		}
+	if len(logsJSON) > 0 {
+		_ = json.Unmarshal(logsJSON, &doc.ActivityLogs)
+	}
+	if len(chainJSON) > 0 {
+		_ = json.Unmarshal(chainJSON, &doc.ApprovalChain)
 	}
 
 	return &doc, nil
 }
 
-// CreateDocument inserts a new document and its field values inside a transaction
+// CreateDocument inserts a new document and its JSONB values and logs inside a transaction
 func (r *DocumentRepository) CreateDocument(ctx context.Context, doc *model.Document) (*model.Document, error) {
 	if doc.ID == "" {
 		doc.ID = fmt.Sprintf("doc-%d", time.Now().UnixMilli())
@@ -162,155 +143,184 @@ func (r *DocumentRepository) CreateDocument(ctx context.Context, doc *model.Docu
 	if doc.Status == "" {
 		doc.Status = "draft"
 	}
+	if doc.CreatedBy == "" {
+		doc.CreatedBy = "ผู้จัดทำเอกสาร"
+	}
 
 	orgID := "org-crestzendo"
 	templateID := doc.TemplateID
-	if templateID == "" {
-		templateID = "nda"
+
+	// If templateName empty, look up from templates table
+	if doc.TemplateName == "" && templateID != "" {
+		_ = r.db.QueryRowContext(ctx, `SELECT name FROM templates WHERE id = $1`, templateID).Scan(&doc.TemplateName)
 	}
 
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("begin transaction failed: %w", err)
+	now := time.Now()
+	doc.CreatedAt = now
+	doc.UpdatedAt = now
+
+	// Prepare default activity log if empty
+	if len(doc.ActivityLogs) == 0 {
+		doc.ActivityLogs = []model.ActivityLog{
+			{
+				ID:          fmt.Sprintf("act-%d", time.Now().UnixMilli()),
+				Action:      "create",
+				PerformedBy: doc.CreatedBy,
+				Timestamp:   now,
+				Details:     "สร้างเอกสารฉบับร่าง",
+			},
+		}
 	}
-	defer tx.Rollback()
+
+	// Prepare default approval chain if empty
+	if len(doc.ApprovalChain) == 0 {
+		doc.ApprovalChain = []map[string]interface{}{
+			{
+				"id":           "step-1",
+				"stepName":     "ผู้จัดทำ / ผู้ยื่นเอกสาร",
+				"assignedRole": "ผู้จัดทำ",
+				"assignedUser": doc.CreatedBy,
+				"status":       "approved",
+				"signedAt":     now.Format(time.RFC3339),
+			},
+			{
+				"id":           "step-2",
+				"stepName":     "ผู้มีอำนาจอนุมัติ / กรรมการ",
+				"assignedRole": "กรรมการผู้จัดการ",
+				"assignedUser": "นายศรายุทธ โกสิยารักษ์",
+				"status":       "pending",
+				"signedAt":     nil,
+			},
+		}
+	}
+
+	valuesJSON, _ := json.Marshal(doc.Values)
+	if doc.Values == nil { valuesJSON = []byte("{}") }
+	logsJSON, _ := json.Marshal(doc.ActivityLogs)
+	chainJSON, _ := json.Marshal(doc.ApprovalChain)
+
+	var safeTemplateID *string
+	if templateID != "" {
+		var exists bool
+		_ = r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM templates WHERE id = $1)`, templateID).Scan(&exists)
+		if exists {
+			safeTemplateID = &templateID
+		}
+	}
 
 	insertDocQuery := `
-		INSERT INTO documents (id, org_id, template_id, name, status, verification_token, watermark, sent_to, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		INSERT INTO documents (
+			id, org_id, template_id, template_name, name, created_by,
+			status, verification_token, watermark, sent_to,
+			values, activity_logs, approval_chain,
+			created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6,
+			$7, $8, 'none', $9,
+			$10, $11, $12,
+			$13, $14
+		)
+		ON CONFLICT (id) DO UPDATE SET
+			name = EXCLUDED.name,
+			template_id = EXCLUDED.template_id,
+			template_name = EXCLUDED.template_name,
+			created_by = EXCLUDED.created_by,
+			status = EXCLUDED.status,
+			sent_to = EXCLUDED.sent_to,
+			values = EXCLUDED.values,
+			activity_logs = EXCLUDED.activity_logs,
+			approval_chain = EXCLUDED.approval_chain,
+			updated_at = EXCLUDED.updated_at
 		RETURNING created_at, updated_at
 	`
-	err = tx.QueryRowContext(ctx, insertDocQuery,
-		doc.ID, orgID, templateID, doc.Name, doc.Status, doc.VerificationToken, "none", doc.SentTo,
+	err := r.db.QueryRowContext(ctx, insertDocQuery,
+		doc.ID, orgID, safeTemplateID, doc.TemplateName, doc.Name, doc.CreatedBy,
+		doc.Status, doc.VerificationToken, doc.SentTo,
+		valuesJSON, logsJSON, chainJSON,
+		now, now,
 	).Scan(&doc.CreatedAt, &doc.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("insert document failed: %w", err)
 	}
 
-	// Insert field values
-	if doc.Values != nil && len(doc.Values) > 0 {
-		upsertFieldQuery := `
-			INSERT INTO document_field_values (id, document_id, field_key, text_value, updated_at)
-			VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-			ON CONFLICT (document_id, field_key) 
-			DO UPDATE SET text_value = EXCLUDED.text_value, updated_at = CURRENT_TIMESTAMP
-		`
-		for k, v := range doc.Values {
-			fieldID := fmt.Sprintf("val-%s-%s", doc.ID, k)
-			strVal := fmt.Sprintf("%v", v)
-			_, err = tx.ExecContext(ctx, upsertFieldQuery, fieldID, doc.ID, k, strVal)
-			if err != nil {
-				return nil, fmt.Errorf("insert field value [%s] failed: %w", k, err)
-			}
-		}
-	}
-
-	// Add Activity Log
-	logID := fmt.Sprintf("log-%d", time.Now().UnixNano())
-	_, _ = tx.ExecContext(ctx, `
-		INSERT INTO document_activity_logs (id, document_id, action, performed_by, details, created_at)
-		VALUES ($1, $2, 'create', 'User', 'สร้างเอกสารใหม่ในระบบ', CURRENT_TIMESTAMP)
-	`, logID, doc.ID)
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit transaction failed: %w", err)
-	}
-
 	return doc, nil
 }
 
-// UpdateDocument updates document metadata and syncs field values inside a transaction
+// UpdateDocument updates document metadata and syncs JSONB values
 func (r *DocumentRepository) UpdateDocument(ctx context.Context, id string, patch *model.Document) (*model.Document, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("begin transaction failed: %w", err)
+	now := time.Now()
+
+	var valuesJSON, logsJSON, chainJSON []byte
+	if patch.Values != nil {
+		valuesJSON, _ = json.Marshal(patch.Values)
 	}
-	defer tx.Rollback()
+	if patch.ActivityLogs != nil {
+		logsJSON, _ = json.Marshal(patch.ActivityLogs)
+	}
+	if patch.ApprovalChain != nil {
+		chainJSON, _ = json.Marshal(patch.ApprovalChain)
+	}
 
 	updateQuery := `
 		UPDATE documents
 		SET name = COALESCE(NULLIF($2, ''), name),
-		    status = COALESCE(NULLIF($3, ''), status),
-		    sent_to = COALESCE($4, sent_to),
-		    updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1
-		RETURNING id, verification_token, name, template_id, status, sent_to, updated_at
+		    template_id = COALESCE(NULLIF($3, ''), template_id),
+		    template_name = COALESCE(NULLIF($4, ''), template_name),
+		    status = COALESCE(NULLIF($5, ''), status),
+		    sent_to = COALESCE($6, sent_to),
+		    values = CASE WHEN $7::jsonb IS NOT NULL THEN $7::jsonb ELSE values END,
+		    activity_logs = CASE WHEN $8::jsonb IS NOT NULL THEN $8::jsonb ELSE activity_logs END,
+		    approval_chain = CASE WHEN $9::jsonb IS NOT NULL THEN $9::jsonb ELSE approval_chain END,
+		    updated_at = $10
+		WHERE id = $1 AND deleted_at IS NULL
 	`
-	var doc model.Document
-	var sentTo, token sql.NullString
-	err = tx.QueryRowContext(ctx, updateQuery, id, patch.Name, patch.Status, patch.SentTo).Scan(
-		&doc.ID, &token, &doc.Name, &doc.TemplateID, &doc.Status, &sentTo, &doc.UpdatedAt,
+	res, err := r.db.ExecContext(ctx, updateQuery,
+		id, patch.Name, patch.TemplateID, patch.TemplateName, patch.Status, patch.SentTo,
+		valuesJSON, logsJSON, chainJSON, now,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
 		return nil, fmt.Errorf("update document failed: %w", err)
 	}
-
-	if token.Valid {
-		doc.VerificationToken = token.String
-	}
-	if sentTo.Valid {
-		doc.SentTo = &sentTo.String
+	rowsAffected, _ := res.RowsAffected()
+	if rowsAffected == 0 {
+		return nil, nil
 	}
 
-	// Sync Field Values
-	if patch.Values != nil && len(patch.Values) > 0 {
-		upsertFieldQuery := `
-			INSERT INTO document_field_values (id, document_id, field_key, text_value, updated_at)
-			VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-			ON CONFLICT (document_id, field_key) 
-			DO UPDATE SET text_value = EXCLUDED.text_value, updated_at = CURRENT_TIMESTAMP
-		`
-		for k, v := range patch.Values {
-			fieldID := fmt.Sprintf("val-%s-%s", id, k)
-			strVal := fmt.Sprintf("%v", v)
-			_, err = tx.ExecContext(ctx, upsertFieldQuery, fieldID, id, k, strVal)
-			if err != nil {
-				return nil, fmt.Errorf("upsert field value [%s] failed: %w", k, err)
-			}
-		}
-	}
-
-	// Add Activity Log
-	logID := fmt.Sprintf("log-%d", time.Now().UnixNano())
-	_, _ = tx.ExecContext(ctx, `
-		INSERT INTO document_activity_logs (id, document_id, action, performed_by, details, created_at)
-		VALUES ($1, $2, 'edit', 'User', 'แก้ไขและบันทึกข้อมูลเอกสาร', CURRENT_TIMESTAMP)
-	`, logID, id)
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit transaction failed: %w", err)
-	}
-
-	doc.Values = patch.Values
-	return &doc, nil
+	return r.GetDocumentByID(ctx, id)
 }
 
-// DeleteDocument deletes a document by ID (Cascade removes child rows)
+// DeleteDocument soft-deletes a document
 func (r *DocumentRepository) DeleteDocument(ctx context.Context, id string) error {
-	res, err := r.db.ExecContext(ctx, "DELETE FROM documents WHERE id = $1", id)
-	if err != nil {
-		return fmt.Errorf("delete document failed: %w", err)
-	}
-	rowsAff, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rowsAff == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
+	query := `UPDATE documents SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1`
+	_, err := r.db.ExecContext(ctx, query, id)
+	return err
 }
 
-// RecordAction logs export, print or email actions in sent_history
-func (r *DocumentRepository) RecordAction(ctx context.Context, docID string, actionType string, format string, recipientEmail string) error {
-	id := fmt.Sprintf("sent-%d", time.Now().UnixMilli())
+// RecordAction adds an activity log entry
+func (r *DocumentRepository) RecordAction(ctx context.Context, id string, action string, format string, recipient string) error {
+	logID := fmt.Sprintf("act-%d", time.Now().UnixNano())
+	details := fmt.Sprintf("ดำเนินการ: %s", action)
+	if format != "" {
+		details += fmt.Sprintf(" (%s)", format)
+	}
+	if recipient != "" {
+		details += fmt.Sprintf(" ส่งไปยัง %s", recipient)
+	}
+	logEntry := model.ActivityLog{
+		ID:          logID,
+		Action:      action,
+		PerformedBy: "User",
+		Timestamp:   time.Now(),
+		Details:     details,
+	}
+	logBytes, _ := json.Marshal([]model.ActivityLog{logEntry})
+
 	query := `
-		INSERT INTO sent_history (id, document_id, action_type, format, recipient_email, status, sent_at)
-		VALUES ($1, $2, $3, $4, $5, 'success', CURRENT_TIMESTAMP)
+		UPDATE documents
+		SET activity_logs = activity_logs || $2::jsonb,
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE id = $1
 	`
-	_, err := r.db.ExecContext(ctx, query, id, docID, actionType, format, recipientEmail)
+	_, err := r.db.ExecContext(ctx, query, id, logBytes)
 	return err
 }
