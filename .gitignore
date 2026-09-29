@@ -16,3 +16,8 @@ bin/
 .vscode/
 .idea/
 Thumbs.db
+
+# Database backups
+*.dump
+data/backups/
+
