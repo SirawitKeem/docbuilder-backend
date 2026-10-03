@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"docbuilder-backend/internal/model"
+	"docbuilder-backend/pkg/uid"
 )
 
 type TemplateRepository struct {
@@ -146,7 +147,7 @@ func (r *TemplateRepository) GetTemplateByID(ctx context.Context, id string) (*m
 // CreateTemplate inserts a new custom template with JSONB pages and version
 func (r *TemplateRepository) CreateTemplate(ctx context.Context, t *model.CustomTemplate) (*model.CustomTemplate, error) {
 	if t.ID == "" {
-		t.ID = fmt.Sprintf("tmpl-%d", time.Now().UnixMilli())
+		t.ID = uid.NewID()
 	}
 	now := time.Now()
 	t.CreatedAt = now
@@ -164,7 +165,7 @@ func (r *TemplateRepository) CreateTemplate(ctx context.Context, t *model.Custom
 	if t.Theme == "" { t.Theme = "modern" }
 	if t.Version == 0 { t.Version = 1 }
 	if t.CurrentVersionID == "" {
-		t.CurrentVersionID = fmt.Sprintf("ver-%s-v%d", t.ID, t.Version)
+		t.CurrentVersionID = uid.NewID()
 	}
 
 	pagesJSON, _ := json.Marshal(t.Pages)
@@ -184,7 +185,7 @@ func (r *TemplateRepository) CreateTemplate(ctx context.Context, t *model.Custom
 			current_version_id, icon, badge, pages, sheet_data, margin,
 			created_at, updated_at
 		) VALUES (
-			$1, 'org-crestzendo', $2, $3, $4, $5,
+			$1, '01a08f90-59be-7c58-8b63-54c85d0ca49c', $2, $3, $4, $5,
 			$6, $7, $8, $9, TRUE, FALSE,
 			$10, $11, $12, $13, $14, $15,
 			$16, $17

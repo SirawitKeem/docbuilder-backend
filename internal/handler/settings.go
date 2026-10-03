@@ -17,7 +17,7 @@ func NewSettingsHandler(repo *repository.SettingsRepository) *SettingsHandler {
 }
 
 func (h *SettingsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
-	settings, err := h.repo.GetSettings(r.Context(), "org-crestzendo")
+	settings, err := h.repo.GetSettings(r.Context(), "01a08f90-59be-7c58-8b63-54c85d0ca49c")
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "Failed to retrieve settings: "+err.Error())
 		return
@@ -32,7 +32,7 @@ func (h *SettingsHandler) UpdateSettings(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	updated, err := h.repo.UpdateSettings(r.Context(), "org-crestzendo", patch)
+	updated, err := h.repo.UpdateSettings(r.Context(), "01a08f90-59be-7c58-8b63-54c85d0ca49c", patch)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "Failed to update settings: "+err.Error())
 		return

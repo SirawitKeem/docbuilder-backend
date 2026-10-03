@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"docbuilder-backend/internal/model"
+	"docbuilder-backend/pkg/uid"
 )
 
 type DocumentRepository struct {
@@ -135,10 +135,10 @@ func (r *DocumentRepository) GetDocumentByID(ctx context.Context, id string) (*m
 // CreateDocument inserts a new document and its JSONB values and logs inside a transaction
 func (r *DocumentRepository) CreateDocument(ctx context.Context, doc *model.Document) (*model.Document, error) {
 	if doc.ID == "" {
-		doc.ID = fmt.Sprintf("doc-%d", time.Now().UnixMilli())
+		doc.ID = uid.NewID()
 	}
 	if doc.VerificationToken == "" {
-		doc.VerificationToken = fmt.Sprintf("VRF-%X-%X", rand.Int31(), rand.Int31())
+		doc.VerificationToken = uid.NewVerificationToken()
 	}
 	if doc.Status == "" {
 		doc.Status = "draft"
@@ -147,7 +147,7 @@ func (r *DocumentRepository) CreateDocument(ctx context.Context, doc *model.Docu
 		doc.CreatedBy = "ผู้จัดทำเอกสาร"
 	}
 
-	orgID := "org-crestzendo"
+	orgID := "01a08f90-59be-7c58-8b63-54c85d0ca49c"
 	templateID := doc.TemplateID
 
 	// If templateName empty, look up from templates table
@@ -163,7 +163,7 @@ func (r *DocumentRepository) CreateDocument(ctx context.Context, doc *model.Docu
 	if len(doc.ActivityLogs) == 0 {
 		doc.ActivityLogs = []model.ActivityLog{
 			{
-				ID:          fmt.Sprintf("act-%d", time.Now().UnixMilli()),
+				ID:          uid.NewID(),
 				Action:      "create",
 				PerformedBy: doc.CreatedBy,
 				Timestamp:   now,
@@ -298,7 +298,7 @@ func (r *DocumentRepository) DeleteDocument(ctx context.Context, id string) erro
 
 // RecordAction adds an activity log entry
 func (r *DocumentRepository) RecordAction(ctx context.Context, id string, action string, format string, recipient string) error {
-	logID := fmt.Sprintf("act-%d", time.Now().UnixNano())
+	logID := uid.NewID()
 	details := fmt.Sprintf("ดำเนินการ: %s", action)
 	if format != "" {
 		details += fmt.Sprintf(" (%s)", format)

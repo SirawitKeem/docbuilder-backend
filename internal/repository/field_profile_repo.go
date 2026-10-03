@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	"docbuilder-backend/internal/model"
+	"docbuilder-backend/pkg/uid"
 )
 
 type FieldProfileRepository struct {
@@ -115,12 +115,12 @@ func (r *FieldProfileRepository) GetFieldProfileByID(ctx context.Context, id str
 
 func (r *FieldProfileRepository) CreateFieldProfile(ctx context.Context, fp *model.FieldProfile) (*model.FieldProfile, error) {
 	if fp.ID == "" {
-		fp.ID = fmt.Sprintf("profile-%d", time.Now().UnixMilli())
+		fp.ID = uid.NewID()
 	}
 	if fp.ProfileType == "" {
 		fp.ProfileType = "customer"
 	}
-	orgID := "org-crestzendo"
+	orgID := "01a08f90-59be-7c58-8b63-54c85d0ca49c"
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {

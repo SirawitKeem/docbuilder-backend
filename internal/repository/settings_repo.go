@@ -19,7 +19,7 @@ func NewSettingsRepository(db *sql.DB) *SettingsRepository {
 
 func (r *SettingsRepository) GetSettings(ctx context.Context, orgID string) (map[string]interface{}, error) {
 	if orgID == "" {
-		orgID = "org-crestzendo"
+		orgID = "01a08f90-59be-7c58-8b63-54c85d0ca49c"
 	}
 
 	query := `SELECT key, value FROM settings WHERE org_id = $1`
@@ -53,7 +53,7 @@ func (r *SettingsRepository) GetSettings(ctx context.Context, orgID string) (map
 
 func (r *SettingsRepository) UpdateSettings(ctx context.Context, orgID string, patch map[string]interface{}) (map[string]interface{}, error) {
 	if orgID == "" {
-		orgID = "org-crestzendo"
+		orgID = "01a08f90-59be-7c58-8b63-54c85d0ca49c"
 	}
 
 	upsertQuery := `
